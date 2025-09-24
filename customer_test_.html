@@ -148,6 +148,10 @@
             
             const labels = Object.keys(platformCounts);
             const chartData = Object.values(platformCounts);
+            
+            // Define a palette of colors
+            const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'];
+            const backgroundColors = labels.map((_, index) => colors[index % colors.length]);
 
             const existingChart = Chart.getChart('platformChart');
             if (existingChart) {
@@ -162,8 +166,8 @@
                     datasets: [{
                         label: 'จำนวนผู้ใช้งาน',
                         data: chartData,
-                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
-                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: backgroundColors,
+                        borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
                         borderWidth: 1
                     }]
                 },
