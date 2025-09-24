@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumer Behavior Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="p-6">
+    <div class="bg-white p-8 rounded-2xl shadow-lg">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">แดชบอร์ดพฤติกรรมผู้บริโภค</h1>
+        
+        <!-- Google Sheet URL Section -->
+        <div class="mb-6 p-4 bg-gray-100 rounded-xl">
+            <label for="google-sheet-url-input" class="block text-lg font-semibold text-gray-700 mb-2">วางลิงก์ Google Sheet (public CSV) เพื่อแสดงผล:</label>
+            <input type="text" id="google-sheet-url-input" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., https://docs.google.com/spreadsheets/d/.../pub?gid=...&single=true&output=csv" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vR8oGCOckF8WAok1TIAClRGotK2jgZqppu2e7zNdISMgNVoYLTBTKbmvqJgK_D3Z6xMJCQk1I1qAwA6/pub?gid=0&single=true&output=csv"/>
+            <button id="load-data-button" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">โหลดข้อมูล</button>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-indigo-500 p-6 rounded-2xl shadow-md text-white">
+                <div class="text-sm font-medium opacity-80">จำนวนผู้ใช้งานทั้งหมด</div>
+                <div id="total-users" class="text-4xl font-extrabold mt-1">0</div>
+            </div>
+            <div class="bg-blue-500 p-6 rounded-2xl shadow-md text-white">
+                <div class="text-sm font-medium opacity-80">คะแนนความพึงพอใจเฉลี่ย</div>
+                <div id="avg-satisfaction" class="text-4xl font-extrabold mt-1">0.0</div>
+            </div>
+        </div>
+
+        <!-- Bar Chart -->
+        <div class="bg-gray-50 p-6 rounded-2xl shadow-md mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">จำนวนผู้ใช้งานตามแพลตฟอร์ม</h2>
+            <canvas id="platformChart"></canvas>
+        </div>
+
+        <!-- Filter and Table -->
+        <div class="bg-gray-50 p-6 rounded-2xl shadow-md">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">ข้อมูลทั้งหมด</h2>
+            
+            <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-4">
+                <!-- Platform Filter -->
+                <div class="flex-grow">
+                    <label for="platform-filter" class="block text-sm font-medium text-gray-600 mb-1">กรองตามแพลตฟอร์ม:</label>
+                    <select id="platform-filter" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">ทั้งหมด</option>
+                    </select>
+                </div>
+                
+                <!-- Search Filter -->
+                <div class="flex-grow">
+                    <label for="search-input" class="block text-sm font-medium text-gray-600 mb-1">ค้นหา:</label>
+                    <input type="text" id="search-input" placeholder="ค้นหา..." class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg shadow-inner">
+                <table id="data-table" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-200 sticky top-0">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">อายุ</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">เพศ</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">รายได้</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">การศึกษา</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">แพลตฟอร์ม</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">คะแนนความพึงพอใจ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="no-data-message" class="text-center text-gray-500 mt-4 hidden">ไม่พบข้อมูลที่ตรงกับการค้นหา</div>
+        </div>
+    </div>
+
+    <script>
+        let dashboardData = [];
+
+        async function fetchDataFromGoogleSheet(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const text = await response.text();
+                return parseCSV(text);
+            } catch (error) {
+                console.error("Error fetching or parsing CSV:", error);
+                return null;
+            }
+        }
+
+        function parseCSV(text) {
+            const rows = text.trim().split('\n');
+            const headers = rows[0].split(',').map(header => header.trim().replace(/\r/g, ''));
+            const data = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i].split(',').map(cell => cell.trim().replace(/\r/g, ''));
+                if (row.length === headers.length) {
+                    const rowData = {};
+                    headers.forEach((header, index) => {
+                        rowData[header] = row[index];
+                    });
+                    data.push(rowData);
+                }
+            }
+            return data;
+        }
+
+        function renderDashboard(data) {
+            if (data && data.length > 0) {
+                renderSummaryCards(data);
+                renderPlatformChart(data);
+                populateFilter(data);
+                filterAndRenderTable(data);
+            } else {
+                console.error("No data found or failed to parse data.");
+            }
+        }
+
+        function renderSummaryCards(data) {
+            const totalUsers = data.length;
+            const totalSatisfaction = data.reduce((sum, row) => sum + parseFloat(row.satisfaction_score), 0);
+            const avgSatisfaction = (totalSatisfaction / totalUsers).toFixed(1);
+
+            document.getElementById('total-users').textContent = totalUsers;
+            document.getElementById('avg-satisfaction').textContent = avgSatisfaction;
+        }
+
+        function renderPlatformChart(data) {
+            const platformCounts = {};
+            data.forEach(row => {
+                const platform = row.preferred_platform;
+                platformCounts[platform] = (platformCounts[platform] || 0) + 1;
+            });
+            
+            const labels = Object.keys(platformCounts);
+            const chartData = Object.values(platformCounts);
+
+            const existingChart = Chart.getChart('platformChart');
+            if (existingChart) {
+                existingChart.destroy();
+            }
+
+            const ctx = document.getElementById('platformChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'จำนวนผู้ใช้งาน',
+                        data: chartData,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'จำนวนผู้ใช้งาน'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'แพลตฟอร์ม'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function populateFilter(data) {
+            const platforms = [...new Set(data.map(item => item.preferred_platform))];
+            const selectElement = document.getElementById('platform-filter');
+            selectElement.innerHTML = '<option value="">ทั้งหมด</option>';
+            platforms.forEach(platform => {
+                const option = document.createElement('option');
+                option.value = platform;
+                option.textContent = platform;
+                selectElement.appendChild(option);
+            });
+        }
+
+        function filterAndRenderTable(data) {
+            const platformFilter = document.getElementById('platform-filter').value.toLowerCase();
+            const searchInput = document.getElementById('search-input').value.toLowerCase();
+            const tableBody = document.getElementById('table-body');
+            const noDataMessage = document.getElementById('no-data-message');
+
+            const filteredData = data.filter(item => {
+                const matchesPlatform = platformFilter === "" || (item.preferred_platform && item.preferred_platform.toLowerCase() === platformFilter);
+                const matchesSearch = Object.values(item).some(value => 
+                    String(value).toLowerCase().includes(searchInput)
+                );
+                return matchesPlatform && matchesSearch;
+            });
+
+            tableBody.innerHTML = '';
+            if (filteredData.length > 0) {
+                filteredData.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-100 transition-colors duration-200';
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.customer_id || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.age || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.gender || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.income_level || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.education || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.preferred_platform || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.satisfaction_score || ''}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                noDataMessage.classList.add('hidden');
+            } else {
+                noDataMessage.classList.remove('hidden');
+            }
+        }
+
+        // Event listener for the Load Data button
+        document.getElementById('load-data-button').addEventListener('click', async () => {
+            const url = document.getElementById('google-sheet-url-input').value;
+            if (url) {
+                dashboardData = await fetchDataFromGoogleSheet(url);
+                renderDashboard(dashboardData);
+            }
+        });
+
+        // Event listeners for filters
+        document.getElementById('platform-filter').addEventListener('change', () => filterAndRenderTable(dashboardData));
+        document.getElementById('search-input').addEventListener('input', () => filterAndRenderTable(dashboardData));
+
+        // Initial load on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            const initialUrl = document.getElementById('google-sheet-url-input').value;
+            if (initialUrl) {
+                dashboardData = await fetchDataFromGoogleSheet(initialUrl);
+                renderDashboard(dashboardData);
+            }
+        });
+    </script>
+</body>
+</html>
