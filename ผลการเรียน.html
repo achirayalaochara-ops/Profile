@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grade Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <div class="max-w-6xl mx-auto p-6">
+    <!-- Header -->
+    <h1 class="text-3xl font-bold text-center mb-8">ระบบคำนวณเกรด</h1>
+
+    <!-- Add Student -->
+    <section class="bg-white shadow-lg rounded-lg p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4">เพิ่มรายชื่อนักเรียน</h2>
+      <form id="student-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">ชื่อ-นามสกุล</label>
+          <input type="text" id="student-name" class="w-full p-2 border rounded-md" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">คะแนนเก็บ (0-100)</label>
+          <input type="number" id="work-score" class="w-full p-2 border rounded-md" min="0" max="100" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">คะแนนสอบ (0-100)</label>
+          <input type="number" id="exam-score" class="w-full p-2 border rounded-md" min="0" max="100" required>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white rounded-md px-4 py-2 font-semibold hover:scale-105 transition">
+          เพิ่มนักเรียน
+        </button>
+      </form>
+    </section>
+
+    <!-- Weights -->
+    <section class="bg-white shadow-lg rounded-lg p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4">ตั้งค่าน้ำหนักคะแนน</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">น้ำหนักคะแนนเก็บ (0.0 - 1.0)</label>
+          <input type="number" id="work-weight" class="w-full p-2 border rounded-md" step="0.01" min="0" max="1" value="0.6">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">น้ำหนักคะแนนสอบ (0.0 - 1.0)</label>
+          <input type="number" id="exam-weight" class="w-full p-2 border rounded-md" step="0.01" min="0" max="1" value="0.4">
+        </div>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section class="bg-white shadow-lg rounded-lg p-6">
+      <h2 class="text-xl font-semibold mb-4">ผลการคำนวณ</h2>
+      <div class="flex justify-end mb-4">
+        <button id="calculate-all-btn" class="bg-green-600 text-white rounded-md px-4 py-2 font-semibold hover:scale-105 transition">
+          คำนวณเกรดทั้งหมด
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse">
+          <thead>
+            <tr class="bg-blue-600 text-white">
+              <th class="px-4 py-2">#</th>
+              <th class="px-4 py-2">ชื่อ</th>
+              <th class="px-4 py-2">คะแนนเก็บ</th>
+              <th class="px-4 py-2">คะแนนสอบ</th>
+              <th class="px-4 py-2">คะแนนรวม</th>
+              <th class="px-4 py-2">เกรด</th>
+              <th class="px-4 py-2">การจัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="student-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- JavaScript -->
+  <script>
+    class StudentManager {
+      constructor() {
+        this.STORAGE_KEY = 'grade_calculator_students';
+        this.students = [];
+        this.tableBody = document.getElementById('student-table-body');
+        this.workWeightInput = document.getElementById('work-weight');
+        this.examWeightInput = document.getElementById('exam-weight');
+        this.loadStudents();
+        this.render();
+      }
+
+      save() {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.students));
+      }
+
+      loadStudents() {
+        const data = localStorage.getItem(this.STORAGE_KEY);
+        if (data) {
+          this.students = JSON.parse(data);
+        } else {
+          this.students = [
+            { name: 'อาทิตย์ ไชยพร', workScore: 82, examScore: 88 },
+            { name: 'เบญจมาศ ศรีวัน', workScore: 76, examScore: 91 },
+            { name: 'ชนันท์นันท์ เล็กดี', workScore: 95, examScore: 85 },
+            { name: 'ดวงใจ พิศิษฐ์', workScore: 68, examScore: 72 },
+            { name: 'เอกชัย ยอดศรี', workScore: 54, examScore: 63 }
+          ];
+          this.save();
+        }
+      }
+
+      calculate(work, exam) {
+        const workWeight = parseFloat(this.workWeightInput.value);
+        const examWeight = parseFloat(this.examWeightInput.value);
+
+        if (workWeight + examWeight !== 1.0) {
+          showMessage("น้ำหนักคะแนนเก็บและสอบต้องรวมกันได้ 1.0");
+          return { total: 0, grade: 'Error' };
+        }
+
+        const total = (work * workWeight) + (exam * examWeight);
+        let grade = 'F';
+        if (total >= 80) grade = 'A';
+        else if (total >= 70) grade = 'B';
+        else if (total >= 60) grade = 'C';
+        else if (total >= 50) grade = 'D';
+
+        return { total: total.toFixed(2), grade };
+      }
+
+      render() {
+        this.tableBody.innerHTML = '';
+        this.students.forEach((s, i) => {
+          const { total, grade } = this.calculate(s.workScore, s.examScore);
+          const row = `
+            <tr class="border-b">
+              <td class="px-4 py-2 text-center">${i + 1}</td>
+              <td class="px-4 py-2">${s.name}</td>
+              <td class="px-4 py-2 text-center">${s.workScore}</td>
+              <td class="px-4 py-2 text-center">${s.examScore}</td>
+              <td class="px-4 py-2 text-center font-semibold">${total}</td>
+              <td class="px-4 py-2 text-center font-semibold">${grade}</td>
+              <td class="px-4 py-2 text-center">
+                <button class="bg-red-600 text-white px-3 py-1 rounded-md text-sm" onclick="manager.remove(${i})">ลบ</button>
+              </td>
+            </tr>
+          `;
+          this.tableBody.insertAdjacentHTML('beforeend', row);
+        });
+      }
+
+      add(name, work, exam) {
+        this.students.push({ name, workScore: work, examScore: exam });
+        this.save();
+        this.render();
+      }
+
+      remove(index) {
+        this.students.splice(index, 1);
+        this.save();
+        this.render();
+      }
+
+      calculateAll() {
+        this.render(); // refresh table (เกรดคำนวณสดๆ)
+      }
+    }
+
+    // Modal message
+    function showMessage(msg) {
+      const box = document.createElement('div');
+      box.className = 'fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center';
+      box.innerHTML = `
+        <div class="bg-white p-6 rounded-lg shadow-lg w-80">
+          <p class="mb-4 text-center">${msg}</p>
+          <button class="bg-blue-600 text-white w-full py-2 rounded-md" onclick="this.closest('div').parentElement.remove()">ตกลง</button>
+        </div>
+      `;
+      document.body.appendChild(box);
+    }
+
+    // Init
+    const manager = new StudentManager();
+
+    // Events
+    document.getElementById('student-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = document.getElementById('student-name').value;
+      const work = parseInt(document.getElementById('work-score').value, 10);
+      const exam = parseInt(document.getElementById('exam-score').value, 10);
+
+      if ([work, exam].some(v => v < 0 || v > 100)) {
+        showMessage("คะแนนต้องอยู่ระหว่าง 0-100");
+        return;
+      }
+      manager.add(name, work, exam);
+      e.target.reset();
+    });
+
+    document.getElementById('calculate-all-btn').addEventListener('click', () => manager.calculateAll());
+  </script>
+</body>
+</html>
